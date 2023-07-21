@@ -1,0 +1,21 @@
+# Spacefile Docs: https://go.deta.dev/docs/spacefile/v0
+v: 0
+app_name: "sse-demo"
+#icon: "./assets/logo/v2_pingback-logo_deta@1024.png"
+micros:
+  - name: frontend
+    primary: true
+    src: ./
+    engine: nodejs16
+    include:
+      - bundled
+      - package.json
+    commands:
+    - "ls -al"
+    #- export NODE_OPTIONS=--max-old-space-size=4096
+    #- export
+    #- npm install
+    #- DETA_PROJECT_KEY=a0 NODE_OPTIONS=--max-old-space-size=4096 npm run build
+    #- npm run build
+    run: node bundled
+    dev: vite dev --port $PORT
