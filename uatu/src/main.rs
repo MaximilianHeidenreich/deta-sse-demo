@@ -14,15 +14,16 @@ use tokio_stream::{
 };
 use tower_http::cors::{Any, CorsLayer};
 
-#[derive(Debug, Default, Clone)]
+#[derive(Clone)]
 struct Data {
     id: String,
     data: String,
+    username: String,
 }
 
 impl Data {
-    fn new(id: String, data: String) -> Self {
-        Self { id, data }
+    fn new(id: String, data: String, username: String) -> Self {
+        Self { id, data, username }
     }
 }
 
@@ -47,8 +48,8 @@ async fn main() {
     let adr = format!("0.0.0.0:{}", env::var("PORT").unwrap_or("8080".into()));
     let app = Router::new()
         .route("/", get(root))
-        .route("/sse/:id", get(sse_handler))
-        .route("/push/:id", post(push))
+        .route("/sse/:id/:username", get(sse_handler))
+        .route("/push/:id/:username", post(push))
         .layer(cors)
         .with_state(Arc::new(AppState::default()));
 
@@ -68,14 +69,14 @@ HEAD /sse/<id>
 }
 
 async fn push(
-    Path(id): Path<String>,
+    Path((id, username)): Path<(String, String)>,
     State(state): State<Arc<AppState>>,
     body: String,
 ) -> Response<String> {
     println!("[INFO ] new push: {id}:{body}");
     let mut resp = Response::default();
 
-    match state.tx.send(Data::new(id, body)) {
+    match state.tx.send(Data::new(id, body, username)) {
         Ok(n) => {
             if n != state.tx.receiver_count() {
                 println!("[INFO ] pushed to: {n} receivers");
@@ -94,7 +95,7 @@ async fn push(
 }
 
 async fn sse_handler(
-    Path(id): Path<String>,
+    Path((id, username)): Path<(String, String)>,
     State(state): State<Arc<AppState>>,
 ) -> Sse<impl Stream<Item = Result<Event, BroadcastStreamRecvError>>> {
     println!("[INFO ] new subscriber: {id}");
@@ -102,7 +103,11 @@ async fn sse_handler(
     Sse::new(
         BroadcastStream::new(state.tx.subscribe())
             .filter(move |data| match data {
-                Ok(Data { id: push_id, .. }) => *push_id == id,
+                Ok(Data {
+                    id: push_id,
+                    username: push_username,
+                    ..
+                }) => *push_id == id && *push_username != username,
                 Err(err) => {
                     println!("{err}");
                     true
