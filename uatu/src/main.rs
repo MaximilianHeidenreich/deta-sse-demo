@@ -29,13 +29,12 @@ impl Data {
 #[derive(Debug)]
 struct AppState {
     tx: broadcast::Sender<Data>,
-    rx: broadcast::Receiver<Data>,
 }
 
 impl Default for AppState {
     fn default() -> Self {
-        let (tx, rx) = broadcast::channel(1024 * 10);
-        Self { tx, rx }
+        let (tx, _) = broadcast::channel(1024 * 10);
+        Self { tx }
     }
 }
 
@@ -75,26 +74,22 @@ async fn push(
 ) -> Response<String> {
     println!("[INFO ] new push: {id}:{body}");
     let mut resp = Response::default();
-    let mut data = Data::new(id, body);
 
-    while state.tx.receiver_count() > 0 {
-        match state.tx.send(data) {
-            Ok(n) => {
-                if n != state.tx.receiver_count() {
-                    println!("[INFO ] pushed to: {n} receivers");
-                }
-                *resp.body_mut() = "ok".into();
-                *resp.status_mut() = StatusCode::OK;
-                break;
+    match state.tx.send(Data::new(id, body)) {
+        Ok(n) => {
+            if n != state.tx.receiver_count() {
+                println!("[INFO ] pushed to: {n} receivers");
             }
+            *resp.body_mut() = "ok".into();
+            *resp.status_mut() = StatusCode::OK;
+        }
 
-            Err(ret) => {
-                data = ret.0;
-                // *resp.body_mut() = format!("internal error: {err}");
-                // *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
-            }
-        };
-    }
+        Err(err) => {
+            *resp.body_mut() = format!("internal error: {err}");
+            *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+        }
+    };
+
     resp
 }
 
